@@ -81,9 +81,9 @@ def new_service():
 
 def test_definition():
     service = new_service()
-    assert len(service.order) == 0
+    assert len(service.charts) == 0
     service.check()
-    assert len(service.order) == 6
+    assert len(service.charts) == 6
 
 
 def test_data():
@@ -91,4 +91,4 @@ def test_data():
     service.check()
     data = service.get_data()
     assert len(data) == 42
-    assert data[0] == 24 # deg C
+    assert data['1'] == 24  # deg C
