@@ -9,9 +9,9 @@ class TestService(Service):
 
     def _get_raw_data(self, stderr=False, command=None):
         return """ID     TYPE        LOCATION      STATUS    CURRENT  THRESHOLD
- 1  Basic Sensor Ambient         Normal    75F/ 24C 107F/ 42C
- 2  Basic Sensor Processor Zone  Normal   104F/ 40C 158F/ 70C
- 3  Basic Sensor Processor Zone  Normal   ---F/---C ---F/---C
+ 1  Basic Sensor Ambient         Normal    75F/ 24C 107F/ 42C 
+ 2  Basic Sensor Processor Zone  Normal   104F/ 40C 158F/ 70C 
+ 3  Basic Sensor Processor Zone   Normal   ---F/---C ---F/---C
  4  Basic Sensor Memory Board    Normal    84F/ 29C 188F/ 87C
  5  Basic Sensor Memory Board    Normal    82F/ 28C 188F/ 87C
  6  Basic Sensor Memory Board    Normal   ---F/---C ---F/---C
@@ -22,7 +22,7 @@ class TestService(Service):
 11  Basic Sensor Memory Board    Normal    86F/ 30C 158F/ 70C
 12  Basic Sensor System Board    Normal   ---F/---C ---F/---C
 13  Basic Sensor System Board    Normal   111F/ 44C 221F/105C
-14  Basic Sensor System Board    Normal    96F/ 36C 158F/ 70C
+14  Basic Sensor System Board(2) Normal    96F/ 36C 158F/ 70C
 15  Basic Sensor Pwr. Supply Bay Normal    86F/ 30C ---F/---C
 16  Basic Sensor Pwr. Supply Bay Normal    89F/ 32C 158F/ 70C
 17  Basic Sensor Pwr. Supply Bay Normal    84F/ 29C ---F/---C
@@ -83,12 +83,12 @@ def test_definition():
     service = new_service()
     assert len(service.charts) == 0
     service.check()
-    assert len(service.charts) == 6
+    assert len(service.charts) == 8
 
 
 def test_data():
     service = new_service()
     service.check()
     data = service.get_data()
-    assert len(data) == 42
-    assert data['1'] == 24  # deg C
+    assert len(data) == 42 + 8 + 2
+    assert data['t.1'] == 24, "24 degree of first temperature sensor"
