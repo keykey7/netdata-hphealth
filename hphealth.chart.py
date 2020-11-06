@@ -5,61 +5,66 @@
 # https://learn.netdata.cloud/docs/agent/collectors/python.d.plugin/
 
 from bases.FrameworkServices.ExecutableService import ExecutableService
+from bases.collection import find_binary
 
 
-ORDER = []
-
-CHARTS = {}
-
-
-class HphealthService(ExecutableService):
+class Service(ExecutableService):
 
     def __init__(self, configuration=None, name=None):
         ExecutableService.__init__(self, configuration=configuration, name=name)
         self.command = "hpasmcli"
         if 'command' in self.configuration:
-            self.command = self.configuration['command']
+            self.command = self.configuration['command'].strip()
+            assert " " not in self.command, "no spaces allowed in 'command', use 'args' instead"
             del(self.configuration['command'])  # prevent sideffects in super.check()
         self.args = "show temp;show fans;show powersupply"
         if 'args' in self.configuration:
             self.args = self.configuration['args']
             assert "\"" not in self.args
-        self.last_data = None
+        self.sudo = True
+        if 'sudo' in self.configuration:
+            self.sudo = self.configuration['sudo'] == "True"
         self.defined = False
         self.power_id = None
 
     def _get_raw_data(self, stderr=False, command=None):
-        if command is None:
-            command = self.command_and_args()
-        self.last_data = super()._get_raw_data(stderr, command)
-        return self.last_data
+        if command is None:  # little hack, as ExecutableService won't deal with ';' nor ' ' args
+            command = self.command + ["-s", self.args]
+        return super()._get_raw_data(stderr, command)
 
-    def command_and_args(self):
-        return "{0} -s \"{1}\"".format(self.command, self.args)
-
-    def check_binary(self):
+    def check_binary(self):  # allow override in test
         return super().check()
 
     def check(self):
-        if self.check_binary():
+        if self.sudo:
+            # get the full path to the binary
+            full_hpasmcli = find_binary(self.command)
+            if not full_hpasmcli:
+                self.error("Command `{0}` was not found. Try installing the 'hp-health' package from HPE"
+                           .format(self.command))
+                return False
+            # first check if the command is allowed as sudo
+            sudo_command = find_binary("sudo")
+            if not sudo_command:
+                self.error('Can\'t locate "sudo" binary')
+                return False
+            self.command = [sudo_command, "-l", full_hpasmcli]
+            sudo_lout = self._get_raw_data()
+            if not sudo_lout:
+                # no quotes around sudoers args. sic
+                self.error("Executing `{sudo} -n {command} -s \"{args}\"` will fail. "
+                           "Allow passwordless access for examply by executing `sudo visudo` "
+                           "and adding the line `netdata ALL=(ALL:ALL) NOPASSWD:{command} {args}`"
+                           .format(sudo=sudo_command, command=full_hpasmcli, args=self.args))
+                return False
+            self.command = "{0} -n {1}".format(sudo_command, full_hpasmcli)
+        if self.check_binary():  # from now on self.command is a list
             return True
-        if self.last_data is None:  # not even executed
-            self.error("command {0} was not found. try installing the 'hp-health' package from HPE"
-                       .format(self.command))
+        if not find_binary(self.command[-1]):
+
             return False
-        if len(self.last_data) == 0 or "must be root" not in self.last_data[0]:
-            self.debug("unknown error when executing `{0}`: {1}"
-                       .format(self.command_and_args(), self.last_data))
-            return False
-        command_nosudo = self.command_and_args()
-        self.debug("command `{0}` was not executed as root, trying sudo".format(command_nosudo))
-        self.command = "sudo -n {0}".format(self.command)
-        if self.check_binary():
-            return True
-        self.error("executing `{0}` failed, however the executable {1} exists. "
-                   "Allow passwordless access for examply by executing `sudo visudo` "
-                   "and adding the line `netdata ALL=(ALL:ALL) NOPASSWD:{1}`"
-                   .format(self.command, command_nosudo))
+        self.debug("unknown error executing {0}".format(self.command))
+        return False
 
     def add_chart(self, context, kind, tilte, units, dim_id, dim_name):
         # [context.family/ambient.temperature,
@@ -133,7 +138,8 @@ class HphealthService(ExecutableService):
 
     def _get_data(self):
         lines = self._get_raw_data()
-        assert len(lines) > 0 and "must be root" not in lines[0]
+        assert len(lines) > 0, "got an empty response"
+        assert "must be root" not in lines[0], lines[0]
         mode = None
         data = dict()
         self.power_id = 0

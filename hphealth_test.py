@@ -1,8 +1,7 @@
-import pytest
-from hplog import HphealthService
+from hphealth import Service
 
 
-class TestService(HphealthService):
+class TestService(Service):
 
     def _get_raw_data(self, stderr=False, command=None):
         with open('testdata.txt', 'r') as file:
@@ -10,6 +9,7 @@ class TestService(HphealthService):
             return self.last_data
 
     def check_binary(self):
+        self.command = [self.command]
         self.get_data()
         return True
 
@@ -22,6 +22,7 @@ def new_service():
         "penalty": 0,
         "priority": 0,
         "chart_cleanup": 0,
+        "sudo": "False"
     }, name="fuu")
 
 
