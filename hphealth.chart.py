@@ -129,7 +129,7 @@ class Service(ExecutableService):
                 self.data_counts[partner_dim_id] = 1
             if not self.defined:
                 self.add_chart("partner_count", "Fan", "Fan count per partner group", "amount",
-                               partner_dim_id, "{0} partner".format(partner_id), 'area')
+                               partner_dim_id, "partner {0}".format(partner_id), 'area')
         return dim_id, speed
 
     def parse_power(self, line):
