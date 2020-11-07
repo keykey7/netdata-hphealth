@@ -24,8 +24,8 @@ class Service(ExecutableService):
         if 'sudo' in self.configuration:
             self.sudo = self.configuration['sudo'] == "True"
         self.defined = False
+        self.data_counts = dict()
         self.power_id = None
-        self.fan_partner_count = dict()
 
     def _get_raw_data(self, stderr=False, command=None):
         if command is None:  # little hack, as ExecutableService won't deal with ';' nor ' ' args
@@ -123,10 +123,10 @@ class Service(ExecutableService):
             # Note: a blocked fan will report as not being part of a 'Partner' anymore
             # everyone might report as not being redudnant (and normal speed)
             partner_dim_id = "fanpartner{0}".format(partner_id)
-            if partner_dim_id in self.fan_partner_count:
-                self.fan_partner_count[partner_dim_id] += 1
+            if partner_dim_id in self.data_counts:
+                self.data_counts[partner_dim_id] += 1
             else:
-                self.fan_partner_count[partner_dim_id] = 1
+                self.data_counts[partner_dim_id] = 1
             if not self.defined:
                 self.add_chart("partner_count", "Fan", "Fan count per partner group", "amount",
                                partner_dim_id, "{0} partner".format(partner_id), 'area')
@@ -142,12 +142,12 @@ class Service(ExecutableService):
         if line.startswith("Present"):
             self.power_id += 1
         elif line.startswith("Condition"):
-            dim_id = "pwr{0}_ok".format(self.power_id)
+            if 'power_ok_count' not in self.data_counts:
+                self.data_counts['power_ok_count'] = 0
+            self.data_counts['power_ok_count'] += 1 if ": Ok" in line else 0
             if not self.defined:
-                dim_name = "bay #{0}".format(self.power_id)
-                self.add_chart("condition", "Power Supply", "Condition is ok", "OK", dim_id, dim_name, 'stacked')
-            is_ok = 1 if ": Ok" in line else 0
-            return dim_id, is_ok
+                self.add_chart("condition", "Power Supply", "Power supply count in ok condition", "count",
+                               'power_ok_count', 'ok', 'area')
         elif line.startswith("Power  "):  # two spaces to not conflict with first line
             dim_id = "pwr{0}".format(self.power_id)
             if not self.defined:
@@ -163,7 +163,7 @@ class Service(ExecutableService):
         lines = self._get_raw_data()
         assert len(lines) > 0, "got an empty response"
         assert "must be root" not in lines[0], lines[0]
-        self.fan_partner_count = dict()
+        self.data_counts = dict()
         self.power_id = 0
         mode = None
         data = dict()
@@ -186,5 +186,5 @@ class Service(ExecutableService):
             else:
                 raise AssertionError("unexpected output on line {0}: {1}".format(i, line))
         self.defined = True
-        data.update(self.fan_partner_count)
+        data.update(self.data_counts)
         return data
