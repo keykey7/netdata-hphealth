@@ -53,8 +53,8 @@ Fan  Location        Present Speed  of max  Redundant  Partner  Hot-pluggable
 #4   VIRTUAL         Yes     NORMAL  29%     Yes        0        Yes
 #5   VIRTUAL         Yes     NORMAL  29%     Yes        0        Yes
 #6   VIRTUAL         Yes     NORMAL  29%     Yes        0        Yes
-#7   VIRTUAL         Yes     NORMAL  29%     Yes        0        Yes
-#8   VIRTUAL         Yes     NORMAL  29%     Yes        0        Yes
+#7   VIRTUAL         Yes     NORMAL  29%     Yes        1        Yes
+#8   VIRTUAL         Yes     NORMAL  29%     Yes        1        Yes
 
 
 Power supply #1

@@ -30,14 +30,14 @@ def test_definition():
     service = new_service()
     assert len(service.charts) == 0, service.charts
     service.check()
-    assert len(service.charts) == 5, service.charts
+    assert len(service.charts) == 9, service.charts
 
 
 def test_data():
     service = new_service()
     service.check()
     data = service.get_data()
-    assert len(data) == 33 + 6 + 2, data
+    assert len(data) == 33 + 8 + 4, data
     assert data['tmp1_42'] == 24, "24 degree of first temperature sensor"
     assert data['fan1'] is None
     assert data['fan7'] == 29

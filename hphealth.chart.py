@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 # Description: hp-health sensors netdata python.d module
-# Author: Put your name here (your github login)
+# Author: keykey7
 # SPDX-License-Identifier: GPL-3.0-or-later
-# https://learn.netdata.cloud/docs/agent/collectors/python.d.plugin/
 
 from bases.FrameworkServices.ExecutableService import ExecutableService
 from bases.collection import find_binary
@@ -26,6 +25,7 @@ class Service(ExecutableService):
             self.sudo = self.configuration['sudo'] == "True"
         self.defined = False
         self.power_id = None
+        self.fan_partner_count = dict()
 
     def _get_raw_data(self, stderr=False, command=None):
         if command is None:  # little hack, as ExecutableService won't deal with ';' nor ' ' args
@@ -66,14 +66,14 @@ class Service(ExecutableService):
         self.debug("unknown error executing {0}".format(self.command))
         return False
 
-    def add_chart(self, context, kind, tilte, units, dim_id, dim_name):
-        # [context.family/ambient.temperature,
-        # name/None, title/Human Readable, units/Celsius, type/temperature, context/ambient, 'line']
-        chart_name = context + "." + kind
-        if chart_name not in self.charts:
-            self.charts.add_chart([chart_name, None, tilte, units, kind, context, 'line'])
-        new_chart = self.charts[chart_name]
-        new_chart.add_dimension([dim_id, dim_name])
+    def add_chart(self, subid, kind, tilte, units, dim_id, dim_name, linetype='line'):
+        chart_id = kind.lower().replace(" ", "") + "." + subid
+        if chart_id not in self.charts:
+            # 'id', 'name', 'title', 'units', 'family', 'context', 'chart_type'
+            self.charts.add_chart([chart_id, None, tilte, units, kind, "hphealth." + kind, linetype])
+        new_chart = self.charts[chart_id]
+        if dim_id not in new_chart:
+            new_chart.add_dimension([dim_id, dim_name])
 
     def parse_temperature(self, line):
         # Sensor   Location              Temp       Threshold
@@ -84,13 +84,13 @@ class Service(ExecutableService):
         if parts[2] == '-' or parts[3] == '-':
             return None, None
         sensor_id = parts[0][1:]  # 2
-        threshold_str = parts[3].split('C', 1)[0]  # 70
-        dim_id = "tmp{0}_{1}".format(sensor_id, threshold_str)
+        threshold = int(parts[3].split('C', 1)[0])  # 70
+        dim_id = "tmp{0}_{1}".format(sensor_id, threshold)
         temperature = int(parts[2].split('C', 1)[0])  # 40
         if not self.defined:
             title, context = self.caps_to_title(parts[1])
-            dim_name = "#{0} (max {1}C)".format(sensor_id, threshold_str)
-            self.add_chart(context, "temperature", title, "Celsius", dim_id, dim_name)
+            dim_name = "#{0} <{1}°C".format(sensor_id, threshold)
+            self.add_chart(context, "Temperature", title + " temperatures", "Celsius", dim_id, dim_name)
         return dim_id, temperature
 
     @staticmethod
@@ -108,13 +108,28 @@ class Service(ExecutableService):
         # #6   SYSTEM          Yes     NORMAL  N/A     Yes        1        Yes
         parts = line.split()
         assert len(parts) == 8, line
+
+        # report fan speed
         sensor_id = parts[0][1:]  # 2
         dim_id = "fan{0}".format(sensor_id)
         speed = None if parts[4] == "N/A" else int(parts[4][:-1])  # 29
         if not self.defined:
             title, context = self.caps_to_title(parts[1])
-            self.add_chart(context, "fan", title, "percentage", dim_id, "fan #" + sensor_id)
-            # TODO: add information about redundancy (per partner)
+            self.add_chart(context, "Fan", title + " fans speed", "percentage", dim_id, "fan #" + sensor_id)
+
+        # detect fan failures per partner group
+        partner_id = None if parts[6] == "N/A" else parts[6]
+        if partner_id is not None:
+            # Note: a blocked fan will report as not being part of a 'Partner' anymore
+            # everyone might report as not being redudnant (and normal speed)
+            partner_dim_id = "fanpartner{0}".format(partner_id)
+            if partner_dim_id in self.fan_partner_count:
+                self.fan_partner_count[partner_dim_id] += 1
+            else:
+                self.fan_partner_count[partner_dim_id] = 1
+            if not self.defined:
+                self.add_chart("partner_count", "Fan", "Fan count per partner group", "amount",
+                               partner_dim_id, "{0} partner".format(partner_id), 'area')
         return dim_id, speed
 
     def parse_power(self, line):
@@ -124,13 +139,21 @@ class Service(ExecutableService):
         # 	Condition: Ok
         # 	Hotplug  : Supported
         # 	Power    : 65 Watts
-        if line.startswith("Power  "):  # two spaces to no conflict with the id
+        if line.startswith("Present"):
             self.power_id += 1
+        elif line.startswith("Condition"):
+            dim_id = "pwr{0}_ok".format(self.power_id)
+            if not self.defined:
+                dim_name = "bay #{0}".format(self.power_id)
+                self.add_chart("condition", "Power Supply", "Condition is ok", "OK", dim_id, dim_name, 'stacked')
+            is_ok = 1 if ": Ok" in line else 0
+            return dim_id, is_ok
+        elif line.startswith("Power  "):  # two spaces to not conflict with first line
             dim_id = "pwr{0}".format(self.power_id)
             if not self.defined:
                 dim_name = "bay #{0}".format(self.power_id)
-                self.add_chart("power_watts", "powersupply", "Power Consumption", "Watts", dim_id, dim_name)
-            if line.endswith(" Watts"):
+                self.add_chart("watts", "Power Supply", "Power consumption", "Watts", dim_id, dim_name, 'stacked')
+            if line.endswith(" Watts"):  # otherwise maybe unplugged
                 power = int(line.split()[2])  # 65
                 return dim_id, power
         # TODO: add information about redundancy
@@ -140,9 +163,10 @@ class Service(ExecutableService):
         lines = self._get_raw_data()
         assert len(lines) > 0, "got an empty response"
         assert "must be root" not in lines[0], lines[0]
+        self.fan_partner_count = dict()
+        self.power_id = 0
         mode = None
         data = dict()
-        self.power_id = 0
         for i, line in enumerate(lines):
             line = line.strip()
             if not line:
@@ -162,4 +186,5 @@ class Service(ExecutableService):
             else:
                 raise AssertionError("unexpected output on line {0}: {1}".format(i, line))
         self.defined = True
+        data.update(self.fan_partner_count)
         return data
