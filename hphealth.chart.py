@@ -67,10 +67,11 @@ class Service(ExecutableService):
         return False
 
     def add_chart(self, subid, kind, tilte, units, dim_id, dim_name, linetype='line'):
-        chart_id = kind.lower().replace(" ", "") + "." + subid
+        safe_kind = kind.lower().replace(" ", "")
+        chart_id = safe_kind + "." + subid
         if chart_id not in self.charts:
             # 'id', 'name', 'title', 'units', 'family', 'context', 'chart_type'
-            self.charts.add_chart([chart_id, None, tilte, units, kind, "hphealth." + kind, linetype])
+            self.charts.add_chart([chart_id, None, tilte, units, kind, "hphealth." + safe_kind, linetype])
         new_chart = self.charts[chart_id]
         if dim_id not in new_chart:
             new_chart.add_dimension([dim_id, dim_name])
