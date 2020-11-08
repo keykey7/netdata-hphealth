@@ -42,3 +42,17 @@ def test_data():
     assert data['fan1'] is None
     assert data['fan7'] == 29
     assert data['pwr2'] == 20
+
+
+def test_gen_health_data():
+    for i in range(40, 200, 5):
+        print("""
+template: temperature_over_threshold_{0}c
+      on: hphealth.temperature
+  lookup: max -1m unaligned foreach tmp*_{0},tmp*_{1},tmp*_{2},tmp*_{3},tmp*_{4}
+   units: °C
+   every: 1m
+    warn: $this > (($status >= $WARNING)  ? ( {5} ) : ( {6} ))
+    crit: $this > (($status >= $CRITICAL) ? ( {6} ) : ( {7} ))
+    info: temperature sensor close to {0}C critical threshold
+      to: sysadmin""".format(i, i+1, i+2, i+3, i+4, i-10, i-5, i-2))
