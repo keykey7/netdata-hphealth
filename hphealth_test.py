@@ -1,7 +1,7 @@
 from hphealth import Service
 
 
-class TestService(Service):
+class MockService(Service):
 
     def _get_raw_data(self, stderr=False, command=None):
         with open('testdata.txt', 'r') as file:
@@ -15,7 +15,7 @@ class TestService(Service):
 
 
 def new_service():
-    return TestService(configuration={
+    return MockService(configuration={
         "job_name": "",
         "override_name": "",
         "update_every": 0,
