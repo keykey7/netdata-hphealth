@@ -19,6 +19,10 @@ To allow sudo without password for that specific read-only command execute `sudo
 netdata ALL=(ALL:ALL) NOPASSWD:/usr/sbin/hpasmcli -s show temp;show fans;show powersupply
 ```
 The plugin will check this configuration at startup and recommend a propper setting. 
+To avoid cluttering your auth.log with netdata sudo messages, you can exclude these with:
+```
+Defaults:netdata !syslog, !pam_session
+```
 
 ## Charts
 This module will produce following charts (if data is available):
